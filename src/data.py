@@ -385,16 +385,14 @@ def calc_water_struct_density(struct: Atoms) -> float:
 def process_water_structures(
     data_type,
     num_files=None,
-    descriptor="steinhardt",
-    **kwargs,
 ):
     descriptor_params = {}
     all_densities = {}
 
-    struct_types = ["hda", "lda", "liquid"]
+    struct_types = ["hda", "lda"]
 
     for type in struct_types:
-        path_to_data = root_dir / f"fausto_water_data/{data_type}/{type}"
+        path_to_data = root_dir / f"data/{data_type}/{type}"
         file_names = path_to_data.iterdir()
 
         structs = [read(f) for f in file_names][:num_files]
@@ -407,18 +405,9 @@ def process_water_structures(
             densities = [calc_water_struct_density(s) for s in structs]
 
             main_hda_structs = filter_structures(structs, densities)
-
-            if descriptor == "steinhardt":
-                descriptor_params[type] = np.vstack(
-                    [s.arrays["steinhardt_descriptor"] for s in main_hda_structs]
-                )
-            elif descriptor == "soap":
-                soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-                desc = Descriptor(soap_params)
-                descriptor_params[type] = np.concatenate(
-                    [desc.calc(s)["data"] for s in main_hda_structs]
-                )
-
+            descriptor_params[type] = np.vstack(
+                [s.arrays["steinhardt_descriptor"] for s in main_hda_structs]
+            )
             all_densities[type] = np.array(
                 np.vstack(
                     [[calc_water_struct_density(s)] * len(s) for s in main_hda_structs]
@@ -426,17 +415,9 @@ def process_water_structures(
             ).reshape(-1)
 
         else:
-            if descriptor == "steinhardt":
-                descriptor_params[type] = np.vstack(
-                    [s.arrays["steinhardt_descriptor"] for s in structs]
-                )
-            elif descriptor == "soap":
-                soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-                desc = Descriptor(soap_params)
-                descriptor_params[type] = np.concatenate(
-                    [desc.calc(s)["data"] for s in structs]
-                )
-
+            descriptor_params[type] = np.vstack(
+                [s.arrays["steinhardt_descriptor"] for s in structs]
+            )
             all_densities[type] = (
                 np.vstack([[calc_water_struct_density(s)] * len(s) for s in structs])
             ).reshape(-1)
@@ -444,11 +425,8 @@ def process_water_structures(
     return descriptor_params, all_densities
 
 def process_mda_structures(
-    descriptor: str = "steinhardt",
     all_runs: bool = True,
     run: int = 1,
-    ice_Ic: bool = False,
-    **kwargs,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """Process the mda dataset.
     This function returns two dictionaries which are split by structure types.
@@ -462,15 +440,11 @@ def process_mda_structures(
 
     Parameters
     ----------
-    descriptor : str, optional
-        The descriptor type: SOAP or steinhardt, by default "steinhardt"
     all_runs : bool, optional
         Whether to include the MDA structures from all 5 runs, by default True
     run : int, optional
         The run to get the shearing data from; by default 1.
         If all_runs is False, then this is also the run from which the MDA structure is taken.
-    ice_Ic : bool, optional
-        Whether to include cubic ice in the structure types, by default False
 
     Returns
     -------
@@ -484,25 +458,13 @@ def process_mda_structures(
         "initial_shears",
         "final_shears",
         "mda",
-        # "lda",
-        # "liquid",
     ]
-    if ice_Ic:
-        mda_struct_types.append("ice_Ic")
-
+    
     for type in mda_struct_types:
         structs = get_mda_paper_structures(struct_type=type, run=run, all_runs=all_runs)
-
-        if descriptor == "steinhardt":
-            descriptor_params[type] = np.vstack(
-                [s.arrays["steinhardt_descriptor"] for s in structs]
-            )
-        elif descriptor == "soap":
-            soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-            desc = Descriptor(soap_params)
-            descriptor_params[type] = np.concatenate(
-                [desc.calc(s)["data"] for s in structs]
-            )
+        descriptor_params[type] = np.vstack(
+            [s.arrays["steinhardt_descriptor"] for s in structs]
+        )
 
         all_densities[type] = np.vstack(
             [[calc_water_struct_density(s)] * len(s) for s in structs]
