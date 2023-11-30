@@ -443,109 +443,6 @@ def process_water_structures(
 
     return descriptor_params, all_densities
 
-
-def process_supercooled_structures(pressure, descriptor="steinhardt", **kwargs):
-    descriptor_params = {}
-    all_densities = {}
-
-    if pressure == 1:
-        temps = [205, 210, 215, 220, 225, 230, 235]
-    elif pressure == 400:
-        temps = [195, 200, 205, 210, 215, 220, 225, 230]
-    else:
-        temps = [190, 195, 200, 205, 210, 215, 220, 225, 230]
-    pressures = [pressure] * len(temps)
-
-    for p, t in zip(pressures, temps):
-        path_to_data = root_dir / f"fausto_water_data/supercooled/pressure{p}_temp{t}"
-        file_names = path_to_data.iterdir()
-
-        structs = [read(f) for f in file_names]
-
-        if descriptor == "steinhardt":
-            descriptor_params[f"pressure{p}_temp{t}"] = np.vstack(
-                [s.arrays["steinhardt_descriptor"] for s in structs]
-            )
-        elif descriptor == "soap":
-            soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-            desc = Descriptor(soap_params)
-            descriptor_params[f"pressure{p}_temp{t}"] = np.concatenate(
-                [desc.calc(s)["data"] for s in structs]
-            )
-
-        all_densities[f"pressure{p}_temp{t}"] = (
-            np.vstack([[calc_water_struct_density(s)] * len(s) for s in structs])
-        ).reshape(-1)
-
-    return descriptor_params, all_densities, temps
-
-
-# def process_lda_compression_trajectories(
-#     trajectory_type, temperature, run, descriptor="steinhardt", **kwargs
-# ):
-#     if trajectory_type == "compression":
-#         pressures = np.arange(100, 20_001, 100)
-#     elif trajectory_type == "decompression":
-#         pressures = np.arange(-5000, 19_901, 100)
-
-#     descriptor_params = {}
-#     all_densities = {}
-
-#     structs = []
-#     for p in pressures:
-#         file_name = (
-#             root_dir
-#             / f"fausto_water_data/trajectories_{temperature}K_run{run}/{trajectory_type}/{trajectory_type}_pressure{p}.extxyz"
-#         )
-
-#         structures = read(file_name, index=":")
-#         structs.append(struct)
-
-#     if descriptor == "steinhardt":
-#         descriptor_params[p] = np.vstack(
-#             [s.arrays["steinhardt_descriptor"] for s in structs]
-#         )
-#     elif descriptor == "soap":
-#         soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-#         desc = Descriptor(soap_params)
-#         descriptor_params[p] = np.concatenate([desc.calc(s)["data"] for s in structs])
-
-#     all_densities[p] = (
-#         np.vstack([[calc_water_struct_density(s)] * len(s) for s in structs])
-#     ).reshape(-1)
-
-#     return descriptor_params, all_densities
-
-
-def process_llcp_structures(descriptor="steinhardt", **kwargs):
-    descriptor_params = {}
-    all_densities = {}
-    pressures = ["0165", "01775"]
-
-    for p in pressures:
-        path_to_data = root_dir / f"fausto_water_data/llcp_177K_{p}GPa"
-        file_names = path_to_data.iterdir()
-
-        structs = [read(f) for f in file_names]
-
-        if descriptor == "steinhardt":
-            descriptor_params[f"llcp_pressure{p}"] = np.vstack(
-                [s.arrays["steinhardt_descriptor"] for s in structs]
-            )
-        elif descriptor == "soap":
-            soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-            desc = Descriptor(soap_params)
-            descriptor_params[f"llcp_pressure{p}"] = np.concatenate(
-                [desc.calc(s)["data"] for s in structs]
-            )
-
-        all_densities[f"llcp_pressure{p}"] = (
-            np.vstack([[calc_water_struct_density(s)] * len(s) for s in structs])
-        ).reshape(-1)
-
-    return descriptor_params, all_densities
-
-
 def process_mda_structures(
     descriptor: str = "steinhardt",
     all_runs: bool = True,
@@ -664,168 +561,6 @@ def get_kde(
 
     return density_estimates
 
-
-def predict_supercooled_atom_types(
-    pressure,
-    scaler,
-    model,
-    num_classes,
-    write_to_file=False,
-    descriptor="steinhardt",
-    **kwargs,
-):
-    if pressure == 1:
-        temps = [205, 210, 215, 220, 225, 230, 235]
-    elif pressure == 400:
-        temps = [195, 200, 205, 210, 215, 220, 225, 230]
-    else:
-        temps = [190, 195, 200, 205, 210, 215, 220, 225, 230]
-    pressures = [pressure] * len(temps)
-
-    with torch.no_grad():
-        classes = {}
-        pred_confidences = {}
-        proportions_per_temp = {}
-        for p, t in zip(pressures, temps):
-            path_to_data = Path(f"../fausto_water_data/supercooled/pressure{p}_temp{t}")
-            file_names = path_to_data.iterdir()
-
-            all_classes = []
-            temp_confidences = []
-            structs = [read(f) for f in file_names]
-            proportions = []
-
-            for i, s in enumerate(structs):
-                if descriptor == "steinhardt":
-                    desc = s.arrays["steinhardt_descriptor"]
-                    updated_desc = desc[:, kwargs["desc_to_keep"]]
-                if descriptor == "soap":
-                    soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-                    desc = Descriptor(soap_params)
-                    updated_desc = desc.calc(s)["data"]
-
-                test_x = torch.FloatTensor(scaler.transform(updated_desc))
-
-                # get the predictions, a % confidence is given for each class
-                pred_y = torch.nn.Softmax(dim=-1)(model(test_x))
-
-                # get the class with the highest confidence
-                pred_class = pred_y.argmax(dim=-1).numpy()
-                # get the % confidence for the predicted class
-                confidences = pred_y[np.arange(len(pred_y)), pred_class].numpy()
-
-                # count the number of 0s, 1s, 2s, and 3s
-                class_counts = np.bincount(pred_class, minlength=num_classes)
-                proportions.append(class_counts / len(pred_class))
-                all_classes.append(pred_class)
-                temp_confidences.append(confidences)
-
-                # write to file
-                if write_to_file:
-                    (
-                        hda_confidences,
-                        lda_confidences,
-                        liquid_confidences,
-                        mda_confidences,
-                    ) = pred_y.T.numpy()
-
-                    s.arrays["predicted_classes"] = pred_class
-                    s.arrays["prediction_confidence"] = confidences
-                    s.arrays["hda_confidence"] = hda_confidences
-                    s.arrays["lda_confidence"] = lda_confidences
-                    s.arrays["liquid_confidence"] = liquid_confidences
-                    s.arrays["mda_confidence"] = mda_confidences
-                    write(
-                        f"../fausto_water_data/supercooled/pressure{p}_temp{t}/supercooled_conf{i}.extxyz",
-                        s,
-                        format="extxyz",
-                    )
-
-            proportions = np.mean(
-                proportions, axis=0
-            )  # average over all structures at a given temperature
-            proportions_per_temp[t] = np.array(proportions)
-            pred_confidences[t] = np.concatenate(temp_confidences)
-            classes[t] = np.concatenate(all_classes)
-
-    return proportions_per_temp, pred_confidences, classes
-
-
-def predict_llcp_atom_types(
-    model, scaler, num_classes, write_to_file=False, descriptor="steinhardt", **kwargs
-):
-    pressures = ["0165", "01775"]
-    proportions_per_pressure = {}
-    pred_confidences = {}
-    classes = {}
-
-    for p in pressures:
-        file_range = range(10, 85) if p == "0165" else range(0, 201)
-
-        structs = []
-        for i in file_range:
-            path_to_data = (
-                f"../fausto_water_data/llcp_177K_{p}GPa/critical_point_conf{i}.extxyz"
-            )
-            structs.extend(read(path_to_data, index=":"))
-
-        proportions = []
-        pressure_confidences = []
-        all_classes = []
-
-        with torch.no_grad():
-            for i, s in enumerate(structs):
-                if descriptor == "steinhardt":
-                    desc = s.arrays["steinhardt_descriptor"]
-                    updated_desc = desc[:, kwargs["desc_to_keep"]]
-                if descriptor == "soap":
-                    soap_params = f"soap n_max={kwargs['n_max']} l_max={kwargs['l_max']} cutoff={kwargs['cutoff']} atom_sigma={kwargs['sigma']} average=F n_Z=1 Z=8"
-                    desc = Descriptor(soap_params)
-                    updated_desc = desc.calc(s)["data"]
-
-                test_x = torch.FloatTensor(scaler.transform(updated_desc))
-
-                # get the predictions, a % confidence is given for each class
-                pred_y = torch.nn.Softmax(dim=-1)(model(test_x))
-
-                # get the class with the highest confidence
-                pred_class = pred_y.argmax(dim=-1).numpy()
-                all_classes.append(pred_class)
-                # get the % confidence for the predicted class
-                confidences = pred_y[np.arange(len(pred_y)), pred_class].numpy()
-
-                # count the number of 0s, 1s, 2s, and 3s
-                class_counts = np.bincount(pred_class, minlength=num_classes)
-                proportions.append(class_counts / len(pred_class))
-
-                # write to file
-                if write_to_file:
-                    (
-                        hda_confidences,
-                        lda_confidences,
-                        liquid_confidences,
-                        mda_confidences,
-                    ) = pred_y.T.numpy()
-                    s.arrays["predicted_classes"] = pred_class
-                    s.arrays["prediction_confidence"] = confidences
-                    s.arrays["hda_confidence"] = hda_confidences
-                    s.arrays["lda_confidence"] = lda_confidences
-                    s.arrays["liquid_confidence"] = liquid_confidences
-                    s.arrays["mda_confidence"] = mda_confidences
-                    write(
-                        f"../fausto_water_data/llcp_177K_{p}GPa/critical_point_conf{i}.extxyz",
-                        s,
-                        format="extxyz",
-                    )
-                pressure_confidences.append(confidences)
-
-        proportions_per_pressure[p] = np.array(proportions)
-        pred_confidences[p] = np.concatenate(pressure_confidences)
-        classes[p] = all_classes
-
-    return proportions_per_pressure, pred_confidences, classes
-
-
 def predict_test_set_classes(
     test_structs, scaler, model,
 ):
@@ -858,3 +593,40 @@ def predict_test_set_classes(
         test_classes = one_hot_vectors.argmax(axis=-1)
 
     return pred_classes, test_classes, np.array(pred_confidences)
+
+def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model):
+    if trajectory_type == 'compression':
+        pressures =np.arange(100, 20_001, 100)
+    elif trajectory_type == 'decompression':
+        pressures =np.arange(-5000, 19_901, 100)
+        
+    traj_proportions = {}
+    traj_pred_confidences = {} 
+    traj_pred_classes = {} 
+    for p in pressures:
+        file_name = root_dir / f"data/trajectories_{temperature}K_run{run}/{trajectory_type}/{trajectory_type}_pressure{p}.extxyz"
+        structures = read(file_name, index=':')
+        # get an average steinhardt descriptor
+        descriptors = []
+        for s in structures:
+            descriptors.append(s.arrays["steinhardt_descriptor"])
+        
+        # get a single descriptor for the whole trajectory (i.e. the average of all descriptors)
+        av_descriptor = np.mean(descriptors, axis=0)
+
+        with torch.no_grad():
+            test_x = torch.FloatTensor(scaler.transform(av_descriptor))
+            pred_y = torch.nn.Softmax(dim=-1)(model(test_x))
+
+            # get the class with the highest confidence
+            pred_class = pred_y.argmax(dim=-1).numpy()
+            traj_pred_classes[p] = pred_class
+            # get the % confidence for the predicted class
+            confidences = pred_y[np.arange(len(pred_y)), pred_class].numpy()
+            traj_pred_confidences[p] = confidences
+            
+            # count the number of 0s, 1s, 2s, and 3s
+            class_counts = np.bincount(pred_class, minlength=3)
+            traj_proportions[p] = (class_counts / len(pred_class))
+            
+    return traj_proportions
