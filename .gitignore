@@ -1,0 +1,5 @@
+*.extxyz
+*.yaml
+lightning_logs/
+*.db
+__pycache__
