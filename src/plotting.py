@@ -70,7 +70,7 @@ def prepare_shearing_data(mda_dataset: Dict, descriptor_idx: int) -> List[np.nda
 
     return data
 
-def plot_confusion_matrix(model,train_x, train_y, test_x, test_y):
+def plot_confusion_matrix(model,train_x, train_y, test_x, test_y,regression_name=str):
     model.fit(train_x, train_y)
     y_pred = model.predict(test_x)
     accuracy = accuracy_score(test_y, y_pred)
@@ -86,7 +86,7 @@ def plot_confusion_matrix(model,train_x, train_y, test_x, test_y):
     for spine in plt.gca().spines.values():
         spine.set_visible(False)
         
-    ax.set_title(f'Accuracy = {accuracy*100:.1f}',fontsize=14)
+    ax.set_title(f'{regression_name}') #, Accuracy = {accuracy*100:.1f}%',fontsize=14)
     ax.set_ylabel('Actual label',fontsize=12);
     ax.set_xlabel('Predicted label',fontsize=12);
     ax.tick_params(length=0)

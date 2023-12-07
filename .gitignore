@@ -3,3 +3,7 @@
 lightning_logs/
 *.db
 __pycache__
+*.png
+*.svg
+*.pdf
+.DS_Store
