@@ -74,6 +74,7 @@ def plot_confusion_matrix(model,train_x, train_y, test_x, test_y,regression_name
     model.fit(train_x, train_y)
     y_pred = model.predict(test_x)
     accuracy = accuracy_score(test_y, y_pred)
+    print(f'Accuracy = {accuracy*100:.1f}%')
     cm = confusion_matrix(test_y, y_pred,normalize='true')
 
     fig, ax = plt.subplots(figsize=(5,5))

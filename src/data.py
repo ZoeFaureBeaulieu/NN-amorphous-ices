@@ -556,7 +556,7 @@ def predict_test_set_classes(
 
     return pred_classes, test_classes, np.array(pred_confidences)
 
-def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model):
+def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model,write_to_file=False):
     if trajectory_type == 'compression':
         pressures =np.arange(100, 20_001, 100)
     elif trajectory_type == 'decompression':
@@ -591,4 +591,22 @@ def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model):
             class_counts = np.bincount(pred_class, minlength=3)
             traj_proportions[p] = (class_counts / len(pred_class))
             
+            # write to file
+            if write_to_file:
+                (
+                    hda_confidences,
+                    lda_confidences,
+                    mda_confidences,
+                ) = pred_y.T.numpy()
+                s.arrays["predicted_classes"] = pred_class
+                s.arrays["prediction_confidence"] = confidences
+                s.arrays["hda_confidence"] = hda_confidences
+                s.arrays["lda_confidence"] = lda_confidences
+                s.arrays["mda_confidence"] = mda_confidences
+                write(
+                    f"../data/trajectories_{temperature}K_run{run}/{trajectory_type}/{trajectory_type}_pressure{p}.extxyz",
+                    s,
+                    format="extxyz",
+                )
+        
     return traj_proportions
