@@ -6,7 +6,7 @@ from ase.io import write
 from pathlib import Path
 from ase.io import read
 import torch
-from quippy.descriptors import Descriptor
+from sklearn.preprocessing import StandardScaler
 from ase.io import read, write
 
 from scipy import stats
@@ -22,7 +22,7 @@ def get_mda_paper_structures(
     Parameters
     ----------
     struct_type : str
-        The type of structure to get. Can be "ice_Ih", "initial_shears", "final_shears", "mda_initial_NPT", "mda", or "lda".
+        The type of structure to get. Can be "ice_Ih", "initial_shears", "final_shears", "mda".
     run : int, optional
         The run to get the shearing structures from; by default 1.
         If all_runs is False, then this is also the run from which the final MDA structure is taken.
@@ -100,7 +100,7 @@ def write_to_extxyz(
         format="extxyz",
     )
 
-def label_to_one_hot(labels: np.ndarray) -> np.ndarray:
+def label_to_one_hot(labels: np.ndarray) -> Tuple[np.ndarray, dict]:
     """Convert the labels to one-hot vectors.
     Structure types are mapped to integers, and then converted to one-hot vectors.
     E.g. "hda": 0, "lda": 1, "liquid": 2, "mda": 3
@@ -186,7 +186,8 @@ def get_train_val_test_structures(
     struct_type : str
         The type of structure to get data for. Can be "lda", "liquid", or "hda".
     num_files : int
-        The number of files (i.e. structures) to get. Default is 100.
+        The number of files (i.e. structures) to get. Default is None - i.e. all files.
+        Specifying a smaller number of files will reduce the memory and requirement and speed up training.
 
     Returns
     -------
@@ -203,7 +204,9 @@ def get_train_val_test_structures(
         all_train_files = all_train_files[:num_files]
         all_test_files = all_test_files[:num_files]
 
+    # take 10 structures for validation
     val_files = all_train_files[-10:]
+    # take the rest for training
     train_files = [file for file in all_train_files if file not in val_files]
 
     train_structs = [read(file) for file in train_files]
@@ -211,6 +214,8 @@ def get_train_val_test_structures(
     test_structs = [read(file) for file in all_test_files]
 
     # remove the anomalous HDA structures
+    # there are some highly crystalline structures among the HDA structures
+    # these are anomalous and should be removed
     if struct_type == "hda":
         train_densities = [calc_water_struct_density(s) for s in train_structs]
         val_densities = [calc_water_struct_density(s) for s in val_structs]
@@ -231,21 +236,21 @@ def get_train_val_test_structures(
 
 
 def train_val_test_split(
-    struct_types: List[str] = ["lda", "hda"], num_files: int = None, mda=False
+    struct_types: List[str] = ["lda", "hda"], num_files: int = None, mda=True
 ) -> Tuple[List[Atoms], List[Atoms], List[Atoms]]:
     """Get the training, validation, and testing data for the water configurations.
-    Specify the number of files to use for training and testing.
     The training set will consist of num_files of each structure type.
 
     Parameters
     ----------
     struct_types : List[str], optional
         The structure types to get data for, by default ["lda", "hda"].
-        Can change, for example, if you want to exclude a structure type in training or include "liquid".
+        Can change, for example, to include high-T liquid structures in training.
+        Structure types can be "lda", "liquid", or "hda".
     num_files : int
-        Number of files to use for training. Default is 100.
+        Number of files to use for training. Default is None - i.e. all files.
     mda : bool, optional
-        Whether to include the MDA structures in training, by default False.
+        Whether to include the MDA structures in training, by default True.
 
     Returns
     -------
@@ -268,7 +273,7 @@ def train_val_test_split(
     if mda:
         # get the final MDA structure from all 5 runs
         mda_structs = get_mda_paper_structures(
-            struct_type="mda", all_runs=True, run=None
+            struct_type="mda", all_runs=True
         )
         # take the first 3 for training, the 4th for validation, and the 5th for testing
 
@@ -281,7 +286,7 @@ def train_val_test_split(
 
 def get_descriptor_and_labels(
     structures: List[Atoms],
-    num_samples_per_type: int = 3_000,
+    num_samples_per_type: int = 8_000,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, np.ndarray]:
     """Get the descriptor and labels for the given structures.
 
@@ -290,13 +295,16 @@ def get_descriptor_and_labels(
     structures : List[Atoms]
         The structures to get the descriptors and labels for.
     num_samples_per_type : int, optional
-        The number of samples to take from each structure, by default 3_000.
-        This corresponds to the number of atoms that will be used for training/validation/testing.
+        The number of samples to take from each structure, by default 8_000.
+        This corresponds to the number of atoms of each structure type 
+        that will be used for training/validation/testing.
 
     Returns
     -------
     Tuple[torch.FloatTensor, torch.FloatTensor, np.ndarray]
-        The descriptor, labels, and permutation used for shuffling.
+        The descriptor, labels, and label mapping.
+        The label mapping is a dictionary that maps the structure type to an integer.
+        It tells you what order the one-hot vectors are in.
     """
 
     struct_labels = []
@@ -328,7 +336,7 @@ def get_descriptor_and_labels(
     for label, data_list in descriptor_dict.items():
         if num_samples_per_type == None:
             num_samples_per_type = len(data_list)
-        # shuffle
+
         indices = np.arange(len(data_list))
         permutation = np.random.RandomState(seed=42).permutation(indices)
         if num_samples_per_type > len(data_list):
@@ -383,22 +391,35 @@ def calc_water_struct_density(struct: Atoms) -> float:
 
 
 def process_water_structures(
-    data_type,
-    num_files=None,
-):
+    data_type: int,
+) -> Tuple[Dict[str, np.ndarray]]:
+    """Process the water structures for plotting KDE's.
+    This function returns a dictionary which is split by structure types.
+
+    Parameters
+    ----------
+    data_type : int
+        The type of data to get. Can be training or testing.
+        The plots will look very similar for both training and testing data.
+
+    Returns
+    -------
+    Tuple[Dict[str, np.ndarray]]
+        The descriptors per atom for each structure type.
+    """
+    struct_types = ["hda", "lda"] # can add "liquid" here if you want to include liquid structures
+
     descriptor_params = {}
-    all_densities = {}
-
-    struct_types = ["hda", "lda"]
-
     for type in struct_types:
         path_to_data = root_dir / f"data/{data_type}/{type}"
         file_names = path_to_data.iterdir()
 
-        structs = [read(f) for f in file_names][:num_files]
+        structs = [read(f) for f in file_names]
 
         if type == "hda":
-            # remove the anomalous structures
+            # remove the anomalous HDA structures
+            # there are some highly crystalline structures among the HDA structures
+            # these are anomalous and should be removed
             def filter_structures(structs, densities):
                 return [s for s, density in zip(structs, densities) if density > 1.15]
 
@@ -408,35 +429,24 @@ def process_water_structures(
             descriptor_params[type] = np.vstack(
                 [s.arrays["steinhardt_descriptor"] for s in main_hda_structs]
             )
-            all_densities[type] = np.array(
-                np.vstack(
-                    [[calc_water_struct_density(s)] * len(s) for s in main_hda_structs]
-                )
-            ).reshape(-1)
-
         else:
             descriptor_params[type] = np.vstack(
                 [s.arrays["steinhardt_descriptor"] for s in structs]
             )
-            all_densities[type] = (
-                np.vstack([[calc_water_struct_density(s)] * len(s) for s in structs])
-            ).reshape(-1)
-
-    return descriptor_params, all_densities
+        
+    return descriptor_params
 
 def process_mda_structures(
     all_runs: bool = True,
     run: int = 1,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """Process the mda dataset.
-    This function returns two dictionaries which are split by structure types.
+    This function returns a dictionary which is split by structure types.
     The structure types aim to follow the protocol used in the MDA paper:
         - Ice Ih
         - Initial shears (first 10 structures)
         - Final shears (last 90 structures)
         - MDA
-    The first dictionary contains the descriptor parameters for each structure type.
-    The second dictionary contains the density for each structure type.
 
     Parameters
     ----------
@@ -448,11 +458,11 @@ def process_mda_structures(
 
     Returns
     -------
-    Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]
-        The descriptor parameters and densities for each structure type.
+    Tuple[Dict[str, np.ndarray]]
+        The descriptors per atom each structure type.
     """
     descriptor_params = {}
-    all_densities = {}
+
     mda_struct_types = [
         "ice_Ih",
         "initial_shears",
@@ -466,11 +476,7 @@ def process_mda_structures(
             [s.arrays["steinhardt_descriptor"] for s in structs]
         )
 
-        all_densities[type] = np.vstack(
-            [[calc_water_struct_density(s)] * len(s) for s in structs]
-        ).reshape(-1)
-
-    return descriptor_params, all_densities
+    return descriptor_params
 
 
 def random_sample_from_dict(data_dict, property_dict, sample_size=5000, seed=42):
@@ -524,8 +530,23 @@ def get_kde(
     return density_estimates
 
 def predict_test_set_classes(
-    test_structs, scaler, model,
-):
+    test_structs: List[Atoms], scaler: StandardScaler, model) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Predict the structure classes for the given test structures.
+
+    Parameters
+    ----------
+    test_structs : List[Atoms]
+        The test structures to predict the classes for.
+    scaler : StandardScaler
+        The scaler used to standardise the descriptors.
+    model : 
+        The trained model to use for prediction.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        The predicted classes, the true classes, and the confidence for each prediction.
+    """
     pred_classes = []
     test_labels = []
     pred_confidences = []
@@ -533,11 +554,10 @@ def predict_test_set_classes(
     with torch.no_grad():
         for s in test_structs:
             desc = s.arrays["steinhardt_descriptor"]
-            # updated_desc = desc[:, kwargs["desc_to_keep"]]
             
             test_x = torch.FloatTensor(scaler.transform(desc))
             # get the predictions
-            # a % confidence is given for each class
+            # apply softmax to get the % confidence for each class
             pred_y = torch.nn.Softmax(dim=-1)(model(test_x))
 
             # get the class with the highest confidence
@@ -556,24 +576,46 @@ def predict_test_set_classes(
 
     return pred_classes, test_classes, np.array(pred_confidences)
 
-def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model,write_to_file=False):
-    if trajectory_type == 'compression':
-        pressures =np.arange(100, 20_001, 100)
-    elif trajectory_type == 'decompression':
-        pressures =np.arange(-5000, 19_901, 100)
-        
+def predict_lda_traj_classes(temperature: int, scaler: StandardScaler, model,write_to_file=False)-> Dict[int, np.ndarray]:
+    """Predict the structure classes for the given test structures.
+    The test set contains structures from the isothermal compression of LDA at the given temperature.
+    For each pressure there are 10 structures. 
+    We take the average Steinhardt descriptor for each pressure and predict the class for that average descriptor.
+
+    Parameters
+    ----------
+    temperature : int
+        The temperature of the isothermal compression.
+    scaler : StandardScaler
+        The scaler used to standardise the descriptors.
+    model : 
+        The trained model to use for prediction.
+    write_to_file : bool, optional
+        Whether to write the predicted classes to file, by default False.
+        Use this to generate the colour-coded snapshots shown in Fig. 4 of the paper.
+
+    Returns
+    -------
+    Dict[int, np.ndarray]
+        A dictionary mapping the pressure to the predicted classes.
+    """
+
+    pressures =np.arange(100, 20_001, 100)
+            
     traj_proportions = {}
     traj_pred_confidences = {} 
     traj_pred_classes = {} 
     for p in pressures:
-        file_name = root_dir / f"data/trajectories_{temperature}K_run{run}/{trajectory_type}/{trajectory_type}_pressure{p}.extxyz"
+        file_name = root_dir / f"data/compression_{temperature}K/compression_pressure{p}.extxyz"
         structures = read(file_name, index=':')
-        # get an average steinhardt descriptor
+        
+        # each pressure has 10 structures
         descriptors = []
         for s in structures:
             descriptors.append(s.arrays["steinhardt_descriptor"])
         
-        # get a single descriptor for the whole trajectory (i.e. the average of all descriptors)
+        # get a single descriptor for all 10 structures
+        # (i.e. the average of all descriptors)
         av_descriptor = np.mean(descriptors, axis=0)
 
         with torch.no_grad():
@@ -592,6 +634,8 @@ def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model,wr
             traj_proportions[p] = (class_counts / len(pred_class))
             
             # write to file
+            # only writes the final structure for each pressure
+            # along with the predicted class and confidences
             if write_to_file:
                 (
                     hda_confidences,
@@ -604,7 +648,7 @@ def predict_lda_traj_classes(trajectory_type, temperature, run, scaler, model,wr
                 s.arrays["lda_confidence"] = lda_confidences
                 s.arrays["mda_confidence"] = mda_confidences
                 write(
-                    f"../data/trajectories_{temperature}K_run{run}/{trajectory_type}/{trajectory_type}_pressure{p}.extxyz",
+                    f"../data/compression_{temperature}K/compression_pressure{p}.extxyz",
                     s,
                     format="extxyz",
                 )
