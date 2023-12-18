@@ -1,10 +1,10 @@
-# Research data supporting "High-dimensional order parameters and neural network models applied to amorphous ices"
+# Research data supporting "High-dimensional order parameters and neural network classifiers applied to amorphous ices"
 
 This repository supports the manuscript:
 
 <div align="center">
 
-> **High-dimensional order parameters and neural network models applied to amorphous ices**\
+> **High-dimensional order parameters and neural network classifiers applied to amorphous ices**\
 > [Zoé Faure Beaulieu](https://twitter.com/ZFaureBeaulieu), [Volker Deringer](http://deringer.chem.ox.ac.uk), and [Fausto Martelli]()
 
 </div>
