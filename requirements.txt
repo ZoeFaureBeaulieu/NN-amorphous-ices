@@ -11,13 +11,10 @@ torch
 pytorch-lightning 
 rich
 scikit-learn
-pytest
-pytest-cov
 scipy
 sympy
 wigners
 black
 umap
 locache==3.0
-quippy-ase
 optuna

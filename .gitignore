@@ -1,4 +1,3 @@
-*.extxyz
 *.yaml
 lightning_logs/
 *.db

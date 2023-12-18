@@ -5,7 +5,6 @@ from itertools import product
 from scipy.special import sph_harm
 from ase.neighborlist import NeighborList
 from ase import Atoms
-from ase.io import write
 from pathlib import Path
 import wigners
 
@@ -85,7 +84,7 @@ def get_n_nearest_neighbours(
     return neighbour_vectors, neighbour_indices
 
 
-def find_wigner_combinations(m_values):
+def find_wigner_combinations(m_values: List[int])-> List[Tuple[int, int, int]]:
     """Generates all the combinations of m_values which sum to 0.
 
     Parameters
@@ -95,13 +94,14 @@ def find_wigner_combinations(m_values):
 
     Returns
     -------
-    _type_
-        _description_
+    List[Tuple[int, int, int]]
+        List of tuples containing the combinations of m values which sum to 0.
     """
     combinations_list = []
     for combination in product(m_values, repeat=3):
         if sum(combination) == 0:
             combinations_list.append(combination)
+            
     return combinations_list
 
 
@@ -194,11 +194,33 @@ def get_q_lm(neighbour_vectors, neighbour_indices, l, numb_neighbours):
 
 
 def get_steinhardt_q_l_parameters(
-    l_values,
-    numb_neighbours,
-    neighbour_vectors,
-    neighbour_indices,
-):
+    l_values: List[int],
+    numb_neighbours: int,
+    neighbour_vectors: np.ndarray,
+    neighbour_indices: np.ndarray,
+)-> Tuple[np.ndarray, np.ndarray]:
+    """Get the q_l and av_q_l parameters for each atom in the structure.
+        Each will have shape (len(struct), len(l_values)).
+    
+
+    Parameters
+    ----------
+    l_values : List[int]
+        The l values to use for the q_l parameters.
+        This controls the number of spherical harmonics to use.
+    numb_neighbours : int
+        The number of nearest neighbours to include when calculating the Steinhardt parameters.
+    neighbour_vectors : np.ndarray
+        The distance vectors to the neighbours.
+    neighbour_indices : np.ndarray
+        The indices of the neighbours.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Tuple containing the q_l and av_q_l parameters.
+        Each will have shape (len(struct), len(l_values)).
+    """
     len_struct = len(neighbour_vectors)
 
     all_q_l = np.zeros((len_struct, len(l_values)))
@@ -228,8 +250,32 @@ def get_steinhardt_q_l_parameters(
 
 
 def get_steinhardt_w_l_parameters(
-    l_values, numb_neighbours, neighbour_vectors, neighbour_indices
-):
+    l_values: List[int],
+    numb_neighbours: int, 
+    neighbour_vectors: np.ndarray, 
+    neighbour_indices: np.ndarray,
+)-> Tuple[np.ndarray, np.ndarray]:
+    """Get the w_l and av_w_l parameters for each atom in the structure.
+        Each will have shape (len(struct), len(l_values)).
+    
+    Parameters
+    ----------
+    l_values : List[int]
+        The l values to use for the w_l parameters.
+        This controls the number of spherical harmonics to use.
+    numb_neighbours : int
+        The number of nearest neighbours to include when calculating the Steinhardt parameters.
+    neighbour_vectors : np.ndarray
+        The distance vectors to the neighbours.
+    neighbour_indices : np.ndarray
+        The indices of the neighbours.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Tuple containing the w_l and av_w_l parameters.
+        Each will have shape (len(struct), len(l_values)).
+    """
     len_struct = len(neighbour_vectors)
 
     all_w_l = np.zeros((len_struct, len(l_values)))
@@ -289,7 +335,36 @@ def get_steinhardt_params(
     numb_neighbours: int,
     q_l_values: List[int] = None,
     w_l_values: List[int] = None,
-):
+)-> np.ndarray:
+    """Get the Steinhardt parameters for each atom in the structure.
+    The output will be a 2D array with shape (len(struct), len(q_l_values) + len(w_l_values)).
+
+    Parameters
+    ----------
+    struct : Atoms
+        The structure to get the Steinhardt parameters for.
+    cutoff_radius : float
+        The cut-off radius to use when generating the neighbour list.
+    numb_neighbours : int
+        The number of nearest neighbours to include when calculating the Steinhardt parameters.
+        For this paper, we use 16.
+    q_l_values : List[int], optional
+        The l values to use for the q_l parameters, by default None.
+    w_l_values : List[int], optional
+        The l values to use for the w_l parameters, by default None.
+
+    Returns
+    -------
+    np.ndarray
+        The Steinhardt parameters for each atom in the structure.
+        This will have shape (len(struct), len(q_l_values) + len(w_l_values)).
+        
+
+    Raises
+    ------
+    ValueError
+        At least one of q_l_values or w_l_values must be specified.
+    """
     if q_l_values is None and w_l_values is None:
         raise ValueError("At least one of q_l_values or w_l_values must be specified")
 
