@@ -31,8 +31,8 @@ This repository supports the manuscript:
 
 ### **1. Clone the repository**
 ```bash
-git clone git@github.com:ZoeFaureBeaulieu/mda_paper.git
-cd mda_paper
+git clone git@github.com:ZoeFaureBeaulieu/NN-for-Amorphous-Ices.git
+cd NN-for-Amorphous-Ices
 ```
 
 ### **2. Install dependencies**
