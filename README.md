@@ -5,19 +5,19 @@ This repository supports the manuscript:
 <div align="center">
 
 > **High-dimensional order parameters and neural network classifiers applied to amorphous ices**\
-> [Zoé Faure Beaulieu](https://twitter.com/ZFaureBeaulieu), [Volker Deringer](http://deringer.chem.ox.ac.uk), and [Fausto Martelli]()
+> [Zoé Faure Beaulieu](https://twitter.com/ZFaureBeaulieu), [Volker L. Deringer](http://deringer.chem.ox.ac.uk), and [Fausto Martelli](https://research.ibm.com/people/fausto-martelli)
 
 </div>
 
 ---
 ## Repository Overview
 
-* **[`data/`](data)** contains all extxyz files used to produce the results of the paper.
+* **[`data/`](data)** contains all extxyz files used to produce the results of the manuscript.
 
-    **NOTE:** the [mda](data/mda/) and [ice_Ih](data/ice_Ih/) folders contain data taken from the work by[ Rosu-Finsen et al](https://www.science.org/doi/10.1126/science.abq2105). The original repo can be found [here](https://doi.org/10.17863/CAM.78718).
-* **[`src/`](scripts)** contains the Python scripts required to run all the experiments. Notably, we provide a python implementation for Steinhard parameter calculations in [src/steinhardt.py](src/steinhardt.py).
+    **NOTE:** the [mda](data/mda/) and [ice_Ih](data/ice_Ih/) folders contain data taken from the work by [Rosu-Finsen et al](https://www.science.org/doi/10.1126/science.abq2105). The original repo can be found [here](https://doi.org/10.17863/CAM.78718).
+* **[`src/`](scripts)** contains the Python scripts required to run all the experiments. Notably, we provide a Python implementation for Steinhardt parameter calculations in [src/steinhardt.py](src/steinhardt.py).
 * **[`notebooks/`](notebooks)** contains the notebooks used to generate the results in the paper:
-    - [NN_classification](notebooks/NN_classification.ipynb): train a NN model with optimised hyperparamaters and apply it to LDA compression structures.
+    - [NN_classification](notebooks/NN_classification.ipynb): train a NN model with optimised hyperparameters and apply it to LDA compression structures.
     - [reproduce_NN_results](notebooks/reproduce_NN_results.ipynb): reproduce results from [Connection between liquid and non-crystalline solid phases in water](https://doi.org/10.1063/5.0018923).
     - [sensitivity_analysis](notebooks/sensitivity_analysis.ipynb): perform sensitivity analysis using permutation feature importance.
     - [NN_optimisation](notebooks/NN_optimisation.ipynb): optimise NN parameters using Bayesian optimisation.
