@@ -31,8 +31,8 @@ This repository supports the manuscript:
 
 ### **1. Clone the repository**
 ```bash
-git clone git@github.com:ZoeFaureBeaulieu/NN-for-Amorphous-Ices.git
-cd NN-for-Amorphous-Ices
+git clone git@github.com:ZoeFaureBeaulieu/NN-amorphous-ices.git
+cd NN-amorphous-ices
 ```
 
 ### **2. Install dependencies**
